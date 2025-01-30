@@ -1,0 +1,15 @@
+# Ignorar o arquivo .env com variáveis sensíveis
+.env
+
+# Ignorar arquivos binários compilados
+*.exe
+*.out
+*.exe~
+*.dSYM
+
+# Ignorar cache de build do Go
+*.go.build/
+*.go.bin/
+
+# Ignorar dependências de Go (caso use Go Modules)
+vendor/
