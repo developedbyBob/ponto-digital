@@ -1,6 +1,6 @@
 import PropTypes from 'prop-types';
 import { Navigate } from 'react-router-dom';
-import { authService } from '../services/auth';
+import { authService } from '../../services/auth';
 
 const ProtectedRoute = ({ children }) => {
   if (!authService.isAuthenticated()) {

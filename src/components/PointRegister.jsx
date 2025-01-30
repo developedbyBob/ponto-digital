@@ -1,18 +1,28 @@
 import { useState, useEffect } from 'react';
+import PropTypes from 'prop-types';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Fingerprint, Clock, CheckCircle, XCircle } from 'lucide-react';
-import axios from 'axios';
+import { 
+  Fingerprint, 
+  Clock, 
+  CheckCircle, 
+  XCircle,
+  Loader2,
+  Key
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { pointService } from '@/services/point';
 
-const API_URL = 'http://localhost:8080/api';
-
-const PointRegister = () => {
+const PointRegister = ({ onRegister = () => {} }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [lastRegister, setLastRegister] = useState(null);
   const [biometryAvailable, setBiometryAvailable] = useState(false);
+  const [usePinFallback, setUsePinFallback] = useState(false);
+  const [pin, setPin] = useState('');
 
   useEffect(() => {
     checkBiometrySupport();
@@ -21,10 +31,8 @@ const PointRegister = () => {
 
   const checkBiometrySupport = async () => {
     try {
-      if (window.PublicKeyCredential) {
-        const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-        setBiometryAvailable(available);
-      }
+      const isSupported = await pointService.checkBiometrySupport();
+      setBiometryAvailable(isSupported);
     } catch (error) {
       console.error('Erro ao verificar suporte biométrico:', error);
       setBiometryAvailable(false);
@@ -33,52 +41,12 @@ const PointRegister = () => {
 
   const fetchLastRegister = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`${API_URL}/points`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (response.data.length > 0) {
+      const response = await pointService.getTodayPoints();
+      if (response?.data?.length > 0) {
         setLastRegister(response.data[0]);
       }
     } catch (error) {
       console.error('Erro ao buscar último registro:', error);
-    }
-  };
-
-  const createBiometricCredential = async () => {
-    const challenge = new Uint8Array(32);
-    window.crypto.getRandomValues(challenge);
-    
-    const publicKeyCredentialCreationOptions = {
-      challenge,
-      rp: {
-        name: "Sistema de Ponto Digital",
-        id: window.location.hostname,
-      },
-      user: {
-        id: new Uint8Array(16),
-        name: "user@example.com",
-        displayName: "Usuário",
-      },
-      pubKeyCredParams: [
-        { type: "public-key", alg: -7 }, // ES256
-        { type: "public-key", alg: -257 }, // RS256
-      ],
-      authenticatorSelection: {
-        authenticatorAttachment: "platform",
-        userVerification: "required",
-      },
-      timeout: 60000,
-    };
-
-    try {
-      const credential = await navigator.credentials.create({
-        publicKey: publicKeyCredentialCreationOptions
-      });
-      return credential;
-    } catch (error) {
-      console.error('Falha na verificação biométrica:', error);
-      throw new Error('Falha na verificação biométrica');
     }
   };
 
@@ -88,34 +56,23 @@ const PointRegister = () => {
     setSuccess('');
 
     try {
-      // Verificar biometria
-      const credential = await createBiometricCredential();
-      
-      if (!credential) {
-        throw new Error('Verificação biométrica falhou');
-      }
-
-      // Determinar tipo de registro (entrada/saída)
       const type = !lastRegister || lastRegister.type === 'saída' ? 'entrada' : 'saída';
-
+      
+      // Solicitar verificação biométrica
+      await pointService.authenticateBiometric();
+      
       // Registrar ponto
-      const token = localStorage.getItem('token');
-      const response = await axios.post(
-        `${API_URL}/register-point`,
-        {
-          biometricToken: credential.id,
-          type,
-          device: navigator.userAgent,
-          location: 'Web Browser'
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` }
-        }
-      );
+      const response = await pointService.registerPoint({
+        type,
+        device: navigator.userAgent,
+        authMethod: 'biometric'
+      });
 
-      setSuccess(`Ponto registrado com sucesso: ${type}`);
-      setLastRegister(response.data);
-      fetchLastRegister();
+      if (response?.data) {
+        setSuccess(`Ponto registrado com sucesso: ${type}`);
+        setLastRegister(response.data);
+        onRegister();
+      }
     } catch (err) {
       setError(err.message || 'Erro ao registrar ponto');
     } finally {
@@ -123,74 +80,200 @@ const PointRegister = () => {
     }
   };
 
-  if (!biometryAvailable) {
+  const handlePinSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      const type = !lastRegister || lastRegister.type === 'saída' ? 'entrada' : 'saída';
+      
+      const response = await pointService.registerPoint({
+        type,
+        device: navigator.userAgent,
+        authMethod: 'pin',
+        pin
+      });
+
+      if (response?.data) {
+        setSuccess(`Ponto registrado com sucesso: ${type}`);
+        setLastRegister(response.data);
+        onRegister();
+        setPin('');
+      }
+    } catch (err) {
+      setError(err.message || 'PIN inválido');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const LastRegisterSection = () => (
+    lastRegister && (
+      <div className="p-4 bg-muted rounded-lg">
+        <h3 className="font-medium mb-2">Último registro:</h3>
+        <div className="text-sm text-muted-foreground">
+          <div className="flex items-center space-x-2">
+            <Clock className="h-4 w-4" />
+            <span>
+              {new Date(lastRegister.timestamp).toLocaleString()}
+            </span>
+          </div>
+          <div className="mt-1">
+            Tipo: {lastRegister.type}
+          </div>
+        </div>
+      </div>
+    )
+  );
+
+  const AlertSection = () => (
+    <>
+      {error && (
+        <Alert variant="destructive">
+          <XCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {success && (
+        <Alert className="bg-green-50 border-green-200">
+          <CheckCircle className="h-4 w-4 text-green-500" />
+          <AlertDescription className="text-green-700">{success}</AlertDescription>
+        </Alert>
+      )}
+    </>
+  );
+
+  if (!biometryAvailable && !usePinFallback) {
     return (
-      <Card className="w-full max-w-md mx-auto">
+      <Card>
         <CardHeader>
           <CardTitle className="text-center">Registro de Ponto</CardTitle>
         </CardHeader>
-        <CardContent>
-          <Alert variant="destructive">
+        <CardContent className="space-y-4">
+          <Alert>
             <AlertDescription>
-              Seu dispositivo não suporta autenticação biométrica.
-              Por favor, use um dispositivo compatível.
+              Autenticação biométrica não disponível neste dispositivo.
+              Você pode usar um PIN como alternativa.
             </AlertDescription>
           </Alert>
+          <Button 
+            className="w-full"
+            onClick={() => setUsePinFallback(true)}
+          >
+            <Key className="mr-2 h-4 w-4" />
+            Usar PIN
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (usePinFallback) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-center">Registro de Ponto com PIN</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handlePinSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Input
+                type="password"
+                placeholder="Digite seu PIN"
+                value={pin}
+                onChange={(e) => setPin(e.target.value)}
+                required
+                minLength={4}
+                maxLength={6}
+                pattern="[0-9]*"
+                inputMode="numeric"
+                className="text-center text-2xl tracking-widest"
+              />
+            </div>
+            
+            <AlertSection />
+            
+            <Button 
+              type="submit"
+              className="w-full"
+              disabled={loading}
+            >
+              {loading ? (
+                <span className="flex items-center space-x-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Verificando...</span>
+                </span>
+              ) : (
+                <>
+                  <Key className="mr-2 h-4 w-4" />
+                  Registrar Ponto
+                </>
+              )}
+            </Button>
+            
+            <Button 
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={() => setUsePinFallback(false)}
+            >
+              Tentar Biometria
+            </Button>
+
+            <LastRegisterSection />
+          </form>
         </CardContent>
       </Card>
     );
   }
 
   return (
-    <Card className="w-full max-w-md mx-auto">
+    <Card>
       <CardHeader>
         <CardTitle className="text-center">Registro de Ponto</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="text-center">
+        <div className="flex flex-col items-center justify-center">
           <Button
             size="lg"
             onClick={handleRegisterPoint}
             disabled={loading}
-            className="w-32 h-32 rounded-full"
+            className={cn(
+              "w-32 h-32 rounded-full transition-all duration-200",
+              loading && "animate-pulse"
+            )}
           >
             {loading ? (
-              <Clock className="h-16 w-16 animate-spin" />
+              <Loader2 className="h-16 w-16 animate-spin" />
             ) : (
               <Fingerprint className="h-16 w-16" />
             )}
           </Button>
-          <div className="mt-2 text-sm text-gray-500">
+          <span className="mt-4 text-sm text-muted-foreground">
             {loading ? 'Verificando...' : 'Toque para registrar ponto'}
-          </div>
+          </span>
         </div>
 
-        {error && (
-          <Alert variant="destructive">
-            <XCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
+        <AlertSection />
+        <LastRegisterSection />
 
-        {success && (
-          <Alert className="bg-green-50 border-green-200">
-            <CheckCircle className="h-4 w-4 text-green-500" />
-            <AlertDescription className="text-green-700">{success}</AlertDescription>
-          </Alert>
-        )}
-
-        {lastRegister && (
-          <div className="p-4 bg-gray-50 rounded-lg">
-            <h3 className="font-medium mb-2">Último registro:</h3>
-            <div className="text-sm text-gray-600">
-              <p>Tipo: {lastRegister.type}</p>
-              <p>Horário: {new Date(lastRegister.timestamp).toLocaleString()}</p>
-            </div>
-          </div>
-        )}
+        <Button 
+          variant="outline"
+          className="w-full"
+          onClick={() => setUsePinFallback(true)}
+        >
+          <Key className="mr-2 h-4 w-4" />
+          Usar PIN
+        </Button>
       </CardContent>
     </Card>
   );
+};
+
+PointRegister.propTypes = {
+  onRegister: PropTypes.func
 };
 
 export default PointRegister;

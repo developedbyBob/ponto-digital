@@ -4,6 +4,7 @@ import (
 	"log"
 	"ponto-digital-api/config"
 	"github.com/gin-gonic/gin"
+	"ponto-digital-api/internal/handlers"
 	"go.mongodb.org/mongo-driver/mongo"
 	
 )
@@ -11,49 +12,63 @@ import (
 var db *mongo.Database
 
 func main() {
-	// Conectar ao MongoDB
-	var err error
-	db, err = config.ConnectDB(config.DefaultConfig)
-	if err != nil {
-		log.Fatal("Não foi possível conectar ao banco de dados:", err)
-	}
+    // Conectar ao MongoDB
+    db, err := config.ConnectDB(config.DefaultConfig)
+    if err != nil {
+        log.Fatal("Não foi possível conectar ao banco de dados:", err)
+    }
 
-	r := gin.Default()
+    // Inicializar handlers
+    authHandler := handlers.NewAuthHandler(db)
+    pointHandler := handlers.NewPointHandler(db)
+    userHandler := handlers.NewUserHandler(db)
 
-	// Configuração CORS
-	r.Use(func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
+    r := gin.Default()
 
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(204)
-			return
-		}
+    // Configuração CORS
+    r.Use(func(c *gin.Context) {
+        c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+        c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+        c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
+        c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
 
-		c.Next()
-	})
+        if c.Request.Method == "OPTIONS" {
+            c.AbortWithStatus(204)
+            return
+        }
 
-	// Rotas
-	api := r.Group("/api")
-	{
-		api.POST("/login", handleLogin)
-		api.POST("/register", handleRegister)
-		
-		// Rotas protegidas
-		authorized := api.Group("/")
-		authorized.Use(authMiddleware())
-		{
-			authorized.POST("/register-point", handleRegisterPoint)
-			authorized.GET("/points", handleGetPoints)
-		}
-	}
+        c.Next()
+    })
 
-	// Iniciar servidor
-	if err := r.Run(":8080"); err != nil {
-		log.Fatal("Falha ao iniciar servidor:", err)
-	}
+    // Rotas da API
+    api := r.Group("/api")
+    {
+        // Rotas públicas
+        api.POST("/register", authHandler.Register)
+        api.POST("/login", authHandler.Login)
+
+        // Rotas protegidas
+        protected := api.Group("/")
+        protected.Use(authHandler.AuthMiddleware())
+        {
+            // Rotas de ponto
+            protected.POST("/register-point", pointHandler.RegisterPoint)
+            protected.GET("/points/today", pointHandler.GetUserPoints)
+            protected.GET("/points/monthly", pointHandler.GetMonthlyPoints)
+
+            // Rotas de usuário
+            protected.GET("/profile", userHandler.GetProfile)
+            protected.PUT("/profile", userHandler.UpdateProfile)
+
+            // Rota de estatísticas (opcional)
+            protected.GET("/statistics", pointHandler.GetStatistics)
+        }
+    }
+
+    // Iniciar servidor
+    if err := r.Run(":8080"); err != nil {
+        log.Fatal("Falha ao iniciar servidor:", err)
+    }
 }
 
 func handleLogin(c *gin.Context) {
