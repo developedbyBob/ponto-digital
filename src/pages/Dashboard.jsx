@@ -1,27 +1,28 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { 
-  Clock, 
-  LogOut, 
-  User, 
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Clock,
+  LogOut,
+  User,
   FileText,
   ChevronLeft,
   ChevronRight,
-  Loader2
-} from 'lucide-react';
-import PointRegister from '@/components/PointRegister';
-import { authService } from '@/services/auth';
-import { pointService } from '@/services/point';
-import { cn } from '@/lib/utils';
+  Loader2,
+} from "lucide-react";
+import PointRegister from "@/components/PointRegister";
+import { authService } from "@/services/auth";
+import { pointService } from "@/services/point";
+import { cn } from "@/lib/utils";
+import { formatTime, formatDate } from "@/utils/dateFormat";
 
 const Dashboard = () => {
   const [records, setRecords] = useState([]);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const navigate = useNavigate();
   const user = authService.getCurrentUser();
 
@@ -32,12 +33,13 @@ const Dashboard = () => {
   const fetchRecords = async () => {
     try {
       setLoading(true);
-      setError('');
+      setError("");
       const response = await pointService.getTodayPoints();
+      console.log("Registros recebidos:", response?.data); // Log para debug
       setRecords(response?.data || []);
     } catch (error) {
-      console.error('Erro ao buscar registros:', error);
-      setError('Não foi possível carregar os registros');
+      console.error("Erro ao buscar registros:", error);
+      setError("Não foi possível carregar os registros");
     } finally {
       setLoading(false);
     }
@@ -50,16 +52,16 @@ const Dashboard = () => {
   };
 
   const calculateWorkHours = () => {
-    if (records.length < 2) return '00:00';
+    if (records.length < 2) return "00:00";
 
     let totalMinutes = 0;
     let entryTime = null;
 
-    records.forEach(record => {
-      if (record.type === 'entrada') {
-        entryTime = new Date(record.timestamp);
-      } else if (record.type === 'saída' && entryTime) {
-        const exitTime = new Date(record.timestamp);
+    records.forEach((record) => {
+      if (record.Type === "entrada") {
+        entryTime = new Date(record.Timestamp);
+      } else if (record.Type === "saída" && entryTime) {
+        const exitTime = new Date(record.Timestamp);
         totalMinutes += (exitTime - entryTime) / (1000 * 60);
         entryTime = null;
       }
@@ -67,12 +69,15 @@ const Dashboard = () => {
 
     const hours = Math.floor(totalMinutes / 60);
     const minutes = Math.floor(totalMinutes % 60);
-    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(
+      2,
+      "0"
+    )}`;
   };
 
   const handleLogout = () => {
     authService.logout();
-    navigate('/login');
+    navigate("/login");
   };
 
   return (
@@ -83,7 +88,9 @@ const Dashboard = () => {
           <CardContent className="flex justify-between items-center py-4">
             <div className="flex items-center space-x-2">
               <User className="h-6 w-6" />
-              <span className="font-medium">Olá, {user?.name || 'Usuário'}</span>
+              <span className="font-medium">
+                Olá, {user?.name || "Usuário"}
+              </span>
             </div>
             <Button variant="outline" onClick={handleLogout}>
               <LogOut className="h-4 w-4 mr-2" />
@@ -98,7 +105,9 @@ const Dashboard = () => {
         {/* Resumo do Dia */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xl font-bold">Registros do Dia</CardTitle>
+            <CardTitle className="text-xl font-bold">
+              Registros do Dia
+            </CardTitle>
             <div className="flex items-center space-x-2">
               <Button
                 variant="outline"
@@ -108,7 +117,7 @@ const Dashboard = () => {
                 <ChevronLeft className="h-4 w-4" />
               </Button>
               <span className="text-sm font-medium">
-                {currentDate.toLocaleDateString()}
+                {formatDate(currentDate)}
               </span>
               <Button
                 variant="outline"
@@ -130,12 +139,16 @@ const Dashboard = () => {
               {/* Total de Horas */}
               <div className="bg-primary/5 p-4 rounded-lg">
                 <div className="flex items-center space-x-2">
-                  <Clock className={cn(
-                    "h-5 w-5",
-                    loading ? "animate-spin text-muted-foreground" : "text-primary"
-                  )} />
+                  <Clock
+                    className={cn(
+                      "h-5 w-5",
+                      loading
+                        ? "animate-spin text-muted-foreground"
+                        : "text-primary"
+                    )}
+                  />
                   <span className="font-medium">Total de Horas:</span>
-                  <span>{loading ? '--:--' : calculateWorkHours()}</span>
+                  <span>{loading ? "--:--" : calculateWorkHours()}</span>
                 </div>
               </div>
 
@@ -156,14 +169,20 @@ const Dashboard = () => {
                       className="flex justify-between items-center p-3 bg-muted rounded-lg hover:bg-muted/80 transition-colors"
                     >
                       <div className="flex items-center space-x-2">
-                        <Clock className={cn(
-                          "h-4 w-4",
-                          record.type === 'entrada' ? "text-green-500" : "text-red-500"
-                        )} />
-                        <span className="font-medium">{record.type}</span>
+                        <Clock
+                          className={cn(
+                            "h-4 w-4",
+                            record.Type === "entrada"
+                              ? "text-green-500"
+                              : "text-red-500"
+                          )}
+                        />
+                        <span className="font-medium">{record.Type}</span>
                       </div>
                       <span className="text-sm text-muted-foreground">
-                        {new Date(record.timestamp).toLocaleTimeString()}
+                        {record?.Timestamp
+                          ? formatTime(record.Timestamp)
+                          : "--:--"}
                       </span>
                     </div>
                   ))
@@ -178,7 +197,7 @@ const Dashboard = () => {
           <Button
             variant="outline"
             className="h-24 hover:bg-primary/5"
-            onClick={() => navigate('/report')}
+            onClick={() => navigate("/report")}
           >
             <div className="flex flex-col items-center space-y-2">
               <FileText className="h-6 w-6" />
@@ -188,7 +207,7 @@ const Dashboard = () => {
           <Button
             variant="outline"
             className="h-24 hover:bg-primary/5"
-            onClick={() => navigate('/profile')}
+            onClick={() => navigate("/profile")}
           >
             <div className="flex flex-col items-center space-y-2">
               <User className="h-6 w-6" />

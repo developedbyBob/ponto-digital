@@ -1,25 +1,26 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { 
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
   Calendar,
   ChevronLeft,
   Download,
   Clock,
   Loader2,
   LogIn,
-  LogOut
-} from 'lucide-react';
-import { pointService } from '@/services/point';
+  LogOut,
+} from "lucide-react";
+import { pointService } from "@/services/point";
 //import { cn } from '@/lib/utils';
+import { formatTime, formatDate } from "@/utils/dateFormat";
 
 const Report = () => {
   const [monthlyRecords, setMonthlyRecords] = useState([]);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -33,11 +34,12 @@ const Report = () => {
         currentMonth.getFullYear(),
         currentMonth.getMonth() + 1
       );
+      console.log("Registros mensais:", response?.data); // Log para debug
       setMonthlyRecords(response.data);
-      setError('');
+      setError("");
     } catch (error) {
-      setError('Erro ao buscar registros do mês');
-      console.error('Erro ao buscar registros:', error);
+      setError("Erro ao buscar registros do mês");
+      console.error("Erro ao buscar registros:", error);
     } finally {
       setLoading(false);
     }
@@ -45,13 +47,13 @@ const Report = () => {
 
   const calculateTotalMonthHours = () => {
     let totalMinutes = 0;
-    monthlyRecords.forEach(day => {
+    monthlyRecords.forEach((day) => {
       let entryTime = null;
-      day.records.forEach(record => {
-        if (record.type === 'entrada') {
-          entryTime = new Date(record.timestamp);
-        } else if (record.type === 'saída' && entryTime) {
-          const exitTime = new Date(record.timestamp);
+      day.records.forEach((record) => {
+        if (record.Type === "entrada") {
+          entryTime = new Date(record.Timestamp);
+        } else if (record.Type === "saída" && entryTime) {
+          const exitTime = new Date(record.Timestamp);
           totalMinutes += (exitTime - entryTime) / (1000 * 60);
           entryTime = null;
         }
@@ -60,18 +62,21 @@ const Report = () => {
 
     const hours = Math.floor(totalMinutes / 60);
     const minutes = Math.floor(totalMinutes % 60);
-    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(
+      2,
+      "0"
+    )}`;
   };
 
   const calculateDailyHours = (records) => {
     let totalMinutes = 0;
     let entryTime = null;
 
-    records.forEach(record => {
-      if (record.type === 'entrada') {
-        entryTime = new Date(record.timestamp);
-      } else if (record.type === 'saída' && entryTime) {
-        const exitTime = new Date(record.timestamp);
+    records.forEach((record) => {
+      if (record.Type === "entrada") {
+        entryTime = new Date(record.Timestamp);
+      } else if (record.Type === "saída" && entryTime) {
+        const exitTime = new Date(record.Timestamp);
         totalMinutes += (exitTime - entryTime) / (1000 * 60);
         entryTime = null;
       }
@@ -79,28 +84,37 @@ const Report = () => {
 
     const hours = Math.floor(totalMinutes / 60);
     const minutes = Math.floor(totalMinutes % 60);
-    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(
+      2,
+      "0"
+    )}`;
   };
 
   const generateReport = () => {
-    const rows = monthlyRecords.map(day => ({
+    const rows = monthlyRecords.map((day) => ({
       data: new Date(day.date).toLocaleDateString(),
       horas: calculateDailyHours(day.records),
-      registros: day.records.map(r => 
-        `${r.type}: ${new Date(r.timestamp).toLocaleTimeString()}`
-      ).join('; ')
+      registros: day.records
+        .map((r) => `${r.Type}: ${new Date(r.Timestamp).toLocaleTimeString()}`)
+        .join("; "),
     }));
 
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + "Data,Horas Trabalhadas,Registros\n"
-      + rows.map(row => 
-          `${row.data},${row.horas},"${row.registros}"`
-        ).join("\n");
+    const csvContent =
+      "data:text/csv;charset=utf-8," +
+      "Data,Horas Trabalhadas,Registros\n" +
+      rows
+        .map((row) => `${row.data},${row.horas},"${row.registros}"`)
+        .join("\n");
 
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `relatorio_${currentMonth.getMonth() + 1}_${currentMonth.getFullYear()}.csv`);
+    link.setAttribute(
+      "download",
+      `relatorio_${
+        currentMonth.getMonth() + 1
+      }_${currentMonth.getFullYear()}.csv`
+    );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -112,7 +126,7 @@ const Report = () => {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <Button variant="ghost" onClick={() => navigate('/dashboard')}>
+            <Button variant="ghost" onClick={() => navigate("/dashboard")}>
               <ChevronLeft className="h-4 w-4 mr-2" />
               Voltar
             </Button>
@@ -136,7 +150,9 @@ const Report = () => {
               >
                 {Array.from({ length: 12 }, (_, i) => (
                   <option key={i} value={i}>
-                    {new Date(0, i).toLocaleDateString('pt-BR', { month: 'long' })}
+                    {new Date(0, i).toLocaleDateString("pt-BR", {
+                      month: "long",
+                    })}
                   </option>
                 ))}
               </select>
@@ -166,7 +182,7 @@ const Report = () => {
                   <span className="font-medium">Total de Horas no Mês:</span>
                 </div>
                 <span className="text-xl font-bold">
-                  {loading ? '--:--' : calculateTotalMonthHours()}
+                  {loading ? "--:--" : calculateTotalMonthHours()}
                 </span>
               </div>
             </CardContent>
@@ -177,7 +193,7 @@ const Report = () => {
         <Card className="bg-primary/5">
           <CardContent className="py-4">
             <div className="flex justify-end">
-              <Button 
+              <Button
                 onClick={generateReport}
                 disabled={loading || monthlyRecords.length === 0}
               >
@@ -217,15 +233,13 @@ const Report = () => {
                   >
                     <div className="flex justify-between items-center mb-2">
                       <span className="font-medium">
-                        {new Date(day.date).toLocaleDateString('pt-BR', {
-                          weekday: 'long',
-                          day: '2-digit',
-                          month: 'long'
-                        })}
+                        {formatDate(day.date)}
                       </span>
                       <div className="flex items-center space-x-2">
                         <Clock className="h-4 w-4" />
-                        <span className="font-medium">{calculateDailyHours(day.records)}</span>
+                        <span className="font-medium">
+                          {calculateDailyHours(day.records)}
+                        </span>
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
@@ -234,14 +248,16 @@ const Report = () => {
                           key={recordIndex}
                           className="flex items-center space-x-2 text-sm text-muted-foreground"
                         >
-                          {record.type === 'entrada' ? (
+                          {record.Type === "entrada" ? (
                             <LogIn className="h-4 w-4 text-green-500" />
                           ) : (
                             <LogOut className="h-4 w-4 text-red-500" />
                           )}
-                          <span>{record.type}:</span>
+                          <span>{record.Type}:</span>
                           <span>
-                            {new Date(record.timestamp).toLocaleTimeString()}
+                            {record?.Timestamp
+                              ? formatTime(record.Timestamp)
+                              : "--:--"}
                           </span>
                         </div>
                       ))}

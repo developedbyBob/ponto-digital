@@ -55,6 +55,7 @@ func main() {
             protected.POST("/register-point", pointHandler.RegisterPoint)
             protected.GET("/points/today", pointHandler.GetUserPoints)
             protected.GET("/points/monthly", pointHandler.GetMonthlyPoints)
+            protected.POST("/setup-pin", userHandler.SetupPin)
 
             // Rotas de usuário
             protected.GET("/profile", userHandler.GetProfile)

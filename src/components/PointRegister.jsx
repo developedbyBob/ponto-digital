@@ -116,7 +116,7 @@ const PointRegister = ({ onRegister = () => {} }) => {
           <div className="flex items-center space-x-2">
             <Clock className="h-4 w-4" />
             <span>
-              {new Date(lastRegister.timestamp).toLocaleString()}
+              {new Date(lastRegister.Timestamp).toLocaleString()}
             </span>
           </div>
           <div className="mt-1">

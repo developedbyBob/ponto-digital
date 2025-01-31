@@ -1,0 +1,41 @@
+@baseUrl = http://192.168.1.11:8080/api
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNjc5YmQyMWJlOTVjNTYyNjBmZGE4ZjBiIiwiZW1haWwiOiJlc2RyYXNzYW50b3M0MUBnbWFpbC5jb20iLCJleHAiOjE3MzgzNzMwNTYsImlhdCI6MTczODI4NjY1Nn0.-l-j3Ylx1w6bOX2NKsQBoBN1IisJenXB6AMhxx1Hny4
+
+### 
+POST {{baseUrl}}/login
+Content-Type: application/json
+
+{
+  "email": "esdrassantos41@gmail.com",
+  "password": "Esdras584"
+}
+
+### Configurar PIN
+POST {{baseUrl}}/setup-pin
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "pin": "1911"
+}
+
+### Registrar Ponto com PIN
+POST {{baseUrl}}/register-point
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "type": "entrada",
+  "location": "Web App",
+  "device": "REST Client Test",
+  "authMethod": "pin",
+  "pin": "1911"
+}
+
+### Buscar Pontos do Dia
+GET {{baseUrl}}/points/today
+Authorization: Bearer {{token}}
+
+### Buscar Pontos do Mês
+GET {{baseUrl}}/points/monthly?year=2024&month=1
+Authorization: Bearer {{token}}

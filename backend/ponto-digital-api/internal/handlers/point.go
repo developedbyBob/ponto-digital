@@ -1,13 +1,13 @@
 package handlers
 
 import (
-	"bytes" // Adicionado
+	//"bytes" // Adicionado
 	"context"
 	"encoding/base64"
 	"encoding/json" // Adicionado
 	"errors"
-	"io" // Adicionado
-	"log"
+	//"io" // Adicionado
+	//"log"
 	"net/http"
 	"sort"
 	"strconv"
@@ -29,15 +29,36 @@ func NewPointHandler(db *mongo.Database) *PointHandler {
 	return &PointHandler{db: db}
 }
 
-type RegisterPointRequest struct {
-    BiometricToken string `json:"biometricToken,omitempty"`
-    Pin           string `json:"pin,omitempty"`
-    Type          string `json:"type" binding:"required"`
-    Location      string `json:"location"`
-    Device        string `json:"device"`
-    AuthMethod    string `json:"authMethod" binding:"required,oneof=pin biometric"`
+type PinRequest struct {
+    Type      string `json:"type" binding:"required"`
+    Pin       string `json:"pin" binding:"required"`
+    Location  string `json:"location"`
+    Device    string `json:"device"`
+    AuthMethod string `json:"authMethod" binding:"required,eq=pin"`
 }
 
+// BiometricRequest para requisições com biometria
+type BiometricRequest struct {
+    Type          string `json:"type" binding:"required"`
+    BiometricToken string `json:"biometricToken" binding:"required"`
+    Location      string `json:"location"`
+    Device        string `json:"device"`
+    AuthMethod    string `json:"authMethod" binding:"required,eq=biometric"`
+}
+/*
+func (req RegisterPointRequest) Validate() error {
+    switch req.AuthMethod {
+    case "pin":
+        if req.Pin == "" {
+            return errors.New("PIN é obrigatório quando o método é 'pin'")
+        }
+    case "biometric":
+        if req.BiometricToken == "" {
+            return errors.New("Token biométrico é obrigatório quando o método é 'biometric'")
+        }
+    }
+    return nil
+}*/
 
 func (h *PointHandler) verifyPin(userID primitive.ObjectID, pin string) error {
     var user models.User
@@ -71,107 +92,99 @@ func (h *PointHandler) verifyBiometricToken(token string) error {
 }
 
 func (h *PointHandler) RegisterPoint(c *gin.Context) {
-    // Log do request raw
-    body, err := io.ReadAll(c.Request.Body)
+    // Ler o body uma vez
+    data, err := c.GetRawData()
     if err != nil {
-        log.Printf("Erro ao ler body: %v\n", err)
         c.JSON(http.StatusBadRequest, gin.H{"error": "Erro ao ler request"})
         return
     }
-    // Restaura o body para ser usado novamente
-    c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
 
-    // Log do body recebido
-    log.Printf("Body recebido: %s\n", string(body))
-
-    // Log dos headers
-    log.Printf("Headers recebidos: %+v\n", c.Request.Header)
-
-    var req RegisterPointRequest
-    if err := c.ShouldBindJSON(&req); err != nil {
-        log.Printf("Erro de binding: %v\n", err)
-        
-        // Tenta decodificar manualmente para debug
-        var rawData map[string]interface{}
-        if jsonErr := json.Unmarshal(body, &rawData); jsonErr != nil {
-            log.Printf("Erro ao decodificar JSON manualmente: %v\n", jsonErr)
-        } else {
-            log.Printf("Dados decodificados manualmente: %+v\n", rawData)
-        }
-
-        c.JSON(http.StatusBadRequest, gin.H{
-            "error": "Erro de validação: " + err.Error(),
-            "received": string(body),
-        })
+    // Primeiro tenta fazer bind como PinRequest
+    var pinReq PinRequest
+    if err := json.Unmarshal(data, &pinReq); err == nil && pinReq.AuthMethod == "pin" {
+        h.handlePinRequest(c, pinReq)
         return
     }
 
-    // Log dos dados após binding
-    log.Printf("Dados após binding: %+v\n", req)
+    // Se não for PIN, tenta como BiometricRequest
+    var bioReq BiometricRequest
+    if err := json.Unmarshal(data, &bioReq); err == nil && bioReq.AuthMethod == "biometric" {
+        h.handleBiometricRequest(c, bioReq)
+        return
+    }
 
-    // Pegar o ID do usuário do contexto
+    // Se chegou aqui, houve erro no formato da requisição
+    c.JSON(http.StatusBadRequest, gin.H{
+        "error": "Formato de requisição inválido",
+        "received": string(data),
+    })
+}
+
+func (h *PointHandler) handlePinRequest(c *gin.Context, req PinRequest) {
     userID, exists := c.Get("user_id")
     if !exists {
         c.JSON(http.StatusUnauthorized, gin.H{"error": "Usuário não autenticado"})
         return
     }
 
-    // Log do userID
-    log.Printf("UserID: %v\n", userID)
-
-    // Validar o tipo de registro
-    if req.Type != "entrada" && req.Type != "saída" {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Tipo de registro inválido: " + req.Type})
+    // Verificar PIN
+    if err := h.verifyPin(userID.(primitive.ObjectID), req.Pin); err != nil {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
         return
     }
 
-    // Validar o método de autenticação e seus requisitos
-    switch req.AuthMethod {
-    case "pin":
-        log.Printf("Tentativa de autenticação com PIN para usuário: %v\n", userID)
-        if req.Pin == "" {
-            c.JSON(http.StatusBadRequest, gin.H{"error": "PIN não fornecido"})
-            return
-        }
-        if err := h.verifyPin(userID.(primitive.ObjectID), req.Pin); err != nil {
-            log.Printf("Erro na verificação do PIN: %v\n", err)
-            c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-            return
-        }
-    case "biometric":
-        log.Printf("Tentativa de autenticação biométrica para usuário: %v\n", userID)
-        if err := h.verifyBiometricToken(req.BiometricToken); err != nil {
-            log.Printf("Erro na verificação biométrica: %v\n", err)
-            c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-            return
-        }
-    default:
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Método de autenticação inválido: " + req.AuthMethod})
-        return
-    }
-
-    // Criar registro de ponto
+    // Criar registro
     timeRecord := models.TimeRecord{
         UserID:     userID.(primitive.ObjectID),
         Type:       req.Type,
         Timestamp:  time.Now(),
         Location:   req.Location,
         Device:     req.Device,
-        AuthMethod: req.AuthMethod,
+        AuthMethod: "pin",
     }
 
-    // Log do registro a ser inserido
-    log.Printf("Inserindo registro: %+v\n", timeRecord)
-
-    // Inserir no banco
     result, err := h.db.Collection("time_records").InsertOne(context.Background(), timeRecord)
     if err != nil {
-        log.Printf("Erro ao inserir no banco: %v\n", err)
         c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao registrar ponto"})
         return
     }
 
-    log.Printf("Registro inserido com sucesso. ID: %v\n", result.InsertedID)
+    c.JSON(http.StatusCreated, gin.H{
+        "id":        result.InsertedID,
+        "message":   "Ponto registrado com sucesso",
+        "timestamp": timeRecord.Timestamp,
+        "type":      timeRecord.Type,
+    })
+}
+
+func (h *PointHandler) handleBiometricRequest(c *gin.Context, req BiometricRequest) {
+    userID, exists := c.Get("user_id")
+    if !exists {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "Usuário não autenticado"})
+        return
+    }
+
+    // Verificar token biométrico
+    if err := h.verifyBiometricToken(req.BiometricToken); err != nil {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+        return
+    }
+
+    // Criar registro
+    timeRecord := models.TimeRecord{
+        UserID:     userID.(primitive.ObjectID),
+        Type:       req.Type,
+        Timestamp:  time.Now(),
+        Location:   req.Location,
+        Device:     req.Device,
+        AuthMethod: "biometric",
+    }
+
+    result, err := h.db.Collection("time_records").InsertOne(context.Background(), timeRecord)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao registrar ponto"})
+        return
+    }
 
     c.JSON(http.StatusCreated, gin.H{
         "id":        result.InsertedID,
