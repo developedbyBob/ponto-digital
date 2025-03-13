@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { authService } from './auth';
 
-const API_URL = 'http://192.168.1.11:8080/api';
+const API_URL = 'http://10.158.15.192:8080/api';
 
 const axiosInstance = axios.create({
   baseURL: API_URL,
@@ -115,8 +115,16 @@ export const pointService = {
       });
 
       const response = await axiosInstance.post('/register-point', payload);
-      console.log('Resposta do servidor:', response.data);
-      return response;
+      console.log('Resposta do servidor (registerPoint):', response.data);
+      
+      // Adicionar Type ao retorno para garantir consistência
+      return {
+        ...response,
+        data: {
+          ...response.data,
+          Type: type // Garantir que Type está presente na resposta
+        }
+      };
     } catch (error) {
       console.error('Erro detalhado ao registrar ponto:', {
         message: error.message,
@@ -137,6 +145,7 @@ export const pointService = {
   async getTodayPoints() {
     try {
       const response = await axiosInstance.get('/points/today');
+      console.log('Resposta getTodayPoints:', response.data);
       return response;
     } catch (error) {
       console.error('Erro ao buscar pontos do dia:', error);
@@ -144,15 +153,66 @@ export const pointService = {
     }
   },
 
+  async getPointsByDate(date) {
+    try {
+      // Formatar a data no formato ISO (YYYY-MM-DD)
+      const formattedDate = this.formatDateISO(date);
+      console.log(`Buscando pontos para a data: ${formattedDate}`);
+      
+      // Buscar registros do mês e depois filtrar pelo dia
+      const year = date.getFullYear();
+      const month = date.getMonth() + 1; // Mês começa em 0
+      
+      const response = await this.getMonthlyPoints(year, month);
+      
+      // Filtrar apenas os registros do dia especificado
+      if (response?.data && Array.isArray(response.data)) {
+        const dayData = response.data.find(day => {
+          return this.isSameDay(new Date(day.date), date);
+        });
+        
+        if (dayData) {
+          return { data: dayData.records };
+        }
+      }
+      
+      // Se não encontrar dados para o dia, retornar array vazio
+      return { data: [] };
+    } catch (error) {
+      console.error(`Erro ao buscar pontos para a data ${date}:`, error);
+      throw error;
+    }
+  },
+
   async getMonthlyPoints(year, month) {
     try {
+      console.log(`Buscando pontos para ano=${year}, mês=${month}`);
       const response = await axiosInstance.get('/points/monthly', {
         params: { year, month }
       });
+      
+      console.log('Resposta getMonthlyPoints:', response.data);
       return response;
     } catch (error) {
-      console.error('Erro ao buscar pontos do mês:', error);
+      console.error(`Erro ao buscar pontos do mês ${month}/${year}:`, error);
       throw error;
     }
+  },
+  
+  // Função auxiliar para verificar se duas datas são o mesmo dia
+  isSameDay(date1, date2) {
+    return (
+      date1.getFullYear() === date2.getFullYear() &&
+      date1.getMonth() === date2.getMonth() &&
+      date1.getDate() === date2.getDate()
+    );
+  },
+  
+  // Função para formatar data no formato ISO (YYYY-MM-DD)
+  formatDateISO(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 };

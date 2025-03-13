@@ -43,7 +43,12 @@ const PointRegister = ({ onRegister = () => {} }) => {
     try {
       const response = await pointService.getTodayPoints();
       if (response?.data?.length > 0) {
-        setLastRegister(response.data[0]);
+        // Ordenar registros por timestamp (do mais recente para o mais antigo)
+        const sortedRecords = [...response.data].sort((a, b) => 
+          new Date(b.Timestamp) - new Date(a.Timestamp)
+        );
+        console.log("Último registro obtido:", sortedRecords[0]);
+        setLastRegister(sortedRecords[0]);
       }
     } catch (error) {
       console.error('Erro ao buscar último registro:', error);
@@ -56,7 +61,23 @@ const PointRegister = ({ onRegister = () => {} }) => {
     setSuccess('');
 
     try {
-      const type = !lastRegister || lastRegister.type === 'saída' ? 'entrada' : 'saída';
+      // Corrigir a lógica para determinar o tipo de registro
+      // Verificar Type (com T maiúsculo)
+      console.log("Determinando tipo com base no último registro:", lastRegister);
+      
+      let type;
+      if (!lastRegister) {
+        type = 'entrada';
+      } else {
+        // Verificar explicitamente Type e type para diagnóstico
+        console.log("lastRegister.Type:", lastRegister.Type);
+        console.log("lastRegister.type:", lastRegister.type);
+        
+        // Usar Type com T maiúsculo como está no backend
+        type = lastRegister.Type === 'entrada' ? 'saída' : 'entrada';
+      }
+      
+      console.log("Tipo determinado para registro:", type);
       
       // Solicitar verificação biométrica
       await pointService.authenticateBiometric();
@@ -70,7 +91,8 @@ const PointRegister = ({ onRegister = () => {} }) => {
 
       if (response?.data) {
         setSuccess(`Ponto registrado com sucesso: ${type}`);
-        setLastRegister(response.data);
+        console.log("Resposta do registro:", response.data);
+        setLastRegister({...response.data, Type: type}); // Garantir que Type está definido
         onRegister();
       }
     } catch (err) {
@@ -86,7 +108,15 @@ const PointRegister = ({ onRegister = () => {} }) => {
     setError('');
 
     try {
-      const type = !lastRegister || lastRegister.type === 'saída' ? 'entrada' : 'saída';
+      // Mesma lógica corrigida para o PIN
+      let type;
+      if (!lastRegister) {
+        type = 'entrada';
+      } else {
+        type = lastRegister.Type === 'entrada' ? 'saída' : 'entrada';
+      }
+      
+      console.log("Tipo determinado para registro com PIN:", type);
       
       const response = await pointService.registerPoint({
         type,
@@ -97,7 +127,8 @@ const PointRegister = ({ onRegister = () => {} }) => {
 
       if (response?.data) {
         setSuccess(`Ponto registrado com sucesso: ${type}`);
-        setLastRegister(response.data);
+        console.log("Resposta do registro com PIN:", response.data);
+        setLastRegister({...response.data, Type: type}); // Garantir que Type está definido
         onRegister();
         setPin('');
       }
@@ -116,11 +147,13 @@ const PointRegister = ({ onRegister = () => {} }) => {
           <div className="flex items-center space-x-2">
             <Clock className="h-4 w-4" />
             <span>
-              {new Date(lastRegister.Timestamp).toLocaleString()}
+              {lastRegister?.Timestamp 
+                ? new Date(lastRegister.Timestamp).toLocaleString('pt-BR')
+                : 'Data não disponível'}
             </span>
           </div>
           <div className="mt-1">
-            Tipo: {lastRegister.type}
+            Tipo: {lastRegister?.Type || 'Não especificado'}
           </div>
         </div>
       </div>

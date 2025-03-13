@@ -34,15 +34,92 @@ const Dashboard = () => {
     try {
       setLoading(true);
       setError("");
-      const response = await pointService.getTodayPoints();
-      console.log("Registros recebidos:", response?.data); // Log para debug
-      setRecords(response?.data || []);
+      
+      // Se a data selecionada for a data atual, usar o endpoint /points/today
+      const isToday = isCurrentDateToday();
+      
+      let response;
+      if (isToday) {
+        response = await pointService.getTodayPoints();
+        console.log("Buscando registros do dia atual:", response?.data);
+      } else {
+        // Para datas diferentes da atual, usamos o endpoint mensal com filtro por dia
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth() + 1; // Mês começa em 0
+        
+        response = await pointService.getMonthlyPoints(year, month);
+        console.log("Resposta mensal completa:", response?.data);
+        
+        // Filtrar apenas os registros do dia selecionado
+        if (response?.data && Array.isArray(response.data)) {
+          const formattedDate = formatDateISO(currentDate);
+          console.log("Procurando registros para a data:", formattedDate);
+          
+          // Procurar pelo dia específico nos dados mensais
+          const dayData = response.data.find(dayItem => {
+            const itemDate = new Date(dayItem.date);
+            return isSameDay(itemDate, currentDate);
+          });
+          
+          if (dayData) {
+            console.log("Registros encontrados para o dia:", dayData);
+            response = { data: dayData.records };
+          } else {
+            console.log("Nenhum registro encontrado para esta data");
+            response = { data: [] };
+          }
+        }
+      }
+      
+      // Verificar e validar cada registro
+      const validatedRecords = response?.data?.map(record => {
+        // Certificar-se de que Timestamp é uma data válida
+        if (record.Timestamp) {
+          try {
+            const date = new Date(record.Timestamp);
+            if (isNaN(date.getTime())) {
+              console.warn("Data inválida detectada:", record.Timestamp);
+              // Se a data for inválida, usar a data atual como fallback
+              return { ...record, Timestamp: new Date().toISOString() };
+            }
+          } catch (e) {
+            console.error("Erro ao processar data:", e);
+            return { ...record, Timestamp: new Date().toISOString() };
+          }
+        }
+        return record;
+      }) || [];
+      
+      setRecords(validatedRecords);
     } catch (error) {
       console.error("Erro ao buscar registros:", error);
       setError("Não foi possível carregar os registros");
     } finally {
       setLoading(false);
     }
+  };
+
+  // Função para verificar se a data atual selecionada é hoje
+  const isCurrentDateToday = () => {
+    const today = new Date();
+    return isSameDay(today, currentDate);
+  };
+  
+  // Função auxiliar para verificar se duas datas são o mesmo dia
+  const isSameDay = (date1, date2) => {
+    return (
+      date1.getFullYear() === date2.getFullYear() &&
+      date1.getMonth() === date2.getMonth() &&
+      date1.getDate() === date2.getDate()
+    );
+  };
+  
+  // Função para formatar data no formato ISO (YYYY-MM-DD)
+  const formatDateISO = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   const handleDateChange = (days) => {
@@ -57,7 +134,12 @@ const Dashboard = () => {
     let totalMinutes = 0;
     let entryTime = null;
 
-    records.forEach((record) => {
+    // Ordenar registros por timestamp
+    const sortedRecords = [...records].sort((a, b) => 
+      new Date(a.Timestamp) - new Date(b.Timestamp)
+    );
+
+    sortedRecords.forEach((record) => {
       if (record.Type === "entrada") {
         entryTime = new Date(record.Timestamp);
       } else if (record.Type === "saída" && entryTime) {
@@ -80,6 +162,13 @@ const Dashboard = () => {
     navigate("/login");
   };
 
+  // Função auxiliar para verificar se uma data é válida
+  const isValidDate = (dateString) => {
+    if (!dateString) return false;
+    const date = new Date(dateString);
+    return !isNaN(date.getTime());
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto p-4 space-y-6">
@@ -99,8 +188,8 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        {/* Registro de Ponto */}
-        <PointRegister onRegister={fetchRecords} />
+        {/* Registro de Ponto (mostrar apenas se a data for hoje) */}
+        {isCurrentDateToday() && <PointRegister onRegister={fetchRecords} />}
 
         {/* Resumo do Dia */}
         <Card>
@@ -180,7 +269,7 @@ const Dashboard = () => {
                         <span className="font-medium">{record.Type}</span>
                       </div>
                       <span className="text-sm text-muted-foreground">
-                        {record?.Timestamp
+                        {isValidDate(record.Timestamp)
                           ? formatTime(record.Timestamp)
                           : "--:--"}
                       </span>
