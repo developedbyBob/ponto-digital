@@ -2,7 +2,7 @@
 
 Um sistema moderno de registro de ponto eletrônico para empresas, com interface amigável e múltiplos métodos de autenticação.
 
-![Ponto Digital Preview](assets/ponto-digital-dash.png)
+![Ponto Digital Preview](public/assets/ponto-digital-dash.png)
 
 ## Visão Geral
 
